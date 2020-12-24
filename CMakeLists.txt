@@ -12,6 +12,10 @@ else(CMAKE_CL_64)
     set(PLATFORM "WIN32")
 endif(CMAKE_CL_64)
 
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+	set(PLATFORM "Linux")
+endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/${PLATFORM})
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/${PLATFORM})
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/${PLATFORM})
@@ -19,7 +23,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib/${PLATFORM})
 set(CMAKE_RELEASE_POSTFIX "")
 set(CMAKE_DEBUG_POSTFIX "d")
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_STANDARD_REQUIRED yes)
 
 if(WIN32)
@@ -30,21 +34,11 @@ if(WIN32)
     endif()
 endif()
 
-# The version number.
-set(FeatExtr_VERSION_MAJOR 1)
-set(FeatExtr_VERSION_MINOR 0)
-set(FeatExtr_VERSION_PATCH 0)
-set(FeatExtr_VERSION
-  ${FeatExtr_VERSION_MAJOR}.${FeatExtr_VERSION_MINOR}.${FeatExtr_VERSION_PATCH})
-
 # set path
 set(DEMO_PATH ${CMAKE_SOURCE_DIR}/demo)
 set(LIB_PATH ${CMAKE_SOURCE_DIR}/lib)
 set(DEPEND_PATH ${CMAKE_SOURCE_DIR}/3rdparty)
 set(INCLUDE_PATH ${CMAKE_SOURCE_DIR}/include)
-
-option(OPTION_BUILD_DEMO "build demo" ON)
-option(OPTION_BUILD_MT "use mt build" ON)
 
 # set MD to MT
 if(OPTION_BUILD_MT)
@@ -67,7 +61,8 @@ include_directories(${INCLUDE_PATH})
 
 # GDAL
 find_package(GDAL REQUIRED)
-include_directories( BEFORE ${GDAL_INCLUDE_DIRS})
+#include_directories(/usr/include/GL)
+#i#nclude_directories(/usr/lib/x86_64-linux-gnu)
 
 add_subdirectory(${LIB_PATH})
 add_subdirectory(ExtraFeaturePoint)

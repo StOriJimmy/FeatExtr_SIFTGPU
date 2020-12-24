@@ -1,22 +1,26 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <io.h>
+#include <sys/io.h>
 #include <time.h>
 #include <vector>
+#include <unistd.h>
+#include <iostream>
 
 #include "SiftGPU/SiftGPU.h"
 #include "GL/glew.h"
-#include "gdal_priv.h"
+//#include "gdal/gdal_priv.h"//Linux OS
+#include "gdal_priv.h"//qilin OS
 
 #include "SIFTFileIO.hpp"
 using namespace std;
+
 
 #ifdef WIN32
 #include <windows.h>
 #include <ppl.h>
 #define PARALLEL_SORT Concurrency::parallel_sort
 #else
-#include <algorithm.h>
+#include <algorithm>
 #define PARALLEL_SORT std::sort
 #endif // WIN32
 
@@ -24,17 +28,78 @@ using namespace std;
 #pragma warning(disable:4251)
 #pragma warning(disable:4996)
 
+inline void _split_whole_name(const char *whole_name, char *fname, char *ext);
+
+inline void _splitpath(const char *path, char *drive, char *dir, char *fname, char *ext)
+{
+    char *p_whole_name;
+
+    drive[0] = '\0';
+    if (NULL == path)
+    {
+        dir[0] = '\0';
+        fname[0] = '\0';
+        ext[0] = '\0';
+        return;
+    }
+
+    if ('/' == path[strlen(path)])
+    {
+        strcpy(dir, path);
+        fname[0] = '\0';
+        ext[0] = '\0';
+        return;
+    }
+
+    p_whole_name = const_cast<char*>(rindex(path, '/'));
+    if (NULL != p_whole_name)
+    {
+        p_whole_name++;
+        _split_whole_name(p_whole_name, fname, ext);
+
+        snprintf(dir, p_whole_name - path, "%s", path);
+    }
+    else
+    {
+        _split_whole_name(path, fname, ext);
+        dir[0] = '\0';
+    }
+    char tmp[256];
+    strcpy(tmp, dir);
+    sprintf(dir, "%s/", tmp);   // add "/" at the last
+}
+
+inline void _split_whole_name(const char *whole_name, char *fname, char *ext)
+{
+    char *p_ext;
+
+    p_ext =  const_cast<char*>(rindex(whole_name, '.'));
+    if (NULL != p_ext)
+    {
+        strcpy(ext, p_ext);
+        snprintf(fname, p_ext - whole_name + 1, "%s", whole_name);
+    }
+    else
+    {
+        ext[0] = '\0';
+        strcpy(fname, whole_name);
+    }
+}
+
 inline bool GetCurrentPath(char buf[], int len)
 {
 #ifdef WIN32
 	GetModuleFileName(NULL, buf, len);
 	return true;
 #else
-	int n = readlink("/proc/self/exe", buf, len);
-	if (n > 0 && n < sizeof(buf)) {
-		return true;
-	}
-	else return false;
+    int ret =  readlink("/proc/self/exe", buf, len );
+    char szdrive_[256];
+    char szdir_[256];
+    char szfname_[256];
+    char szext_[32];
+    _splitpath (buf, szdrive_, szdir_, szfname_, szext_);
+    sprintf(buf, "%s%s",szdrive_, szdir_);
+    return true;
 #endif
 }
 
@@ -69,11 +134,11 @@ inline char *GetIniKeyString(char *title, char *key, char *filename)
 			tmp = strchr(szLine, '=');
 			if ((tmp != NULL) && (flag == 1)) {
 				if (strstr(szLine, key) != NULL) {
-					//×¢ÊÍÐÐ
+					//×¢ï¿½ï¿½ï¿½ï¿½
 
 					if ('#' == szLine[0]) {
 					}
-					else if ('\/' == szLine[0] && '\/' == szLine[1]) {
+					else if ('\\/' == szLine[0] && '\\/' == szLine[1]) {
 					}
 					else {
 						strcpy(tmpstr, tmp + 1);
@@ -87,8 +152,7 @@ inline char *GetIniKeyString(char *title, char *key, char *filename)
 				strcpy(tmpstr, "[");
 				strcat(tmpstr, title);
 				strcat(tmpstr, "]");
-				if (strncmp(tmpstr, szLine, strlen(tmpstr)) == 0) {
-					//ÕÒµ½title         
+				if (strncmp(tmpstr, szLine, strlen(tmpstr)) == 0) {       
 					flag = 1;
 				}
 			}
@@ -123,7 +187,7 @@ inline char *GetFileDirectory(const char* filename) {
 	{
 		if (cur == dir)
 		{
-			//1.¸ùÄ¿Â¼  
+			//1.ï¿½ï¿½Ä¿Â¼  
 			dir[1] = 0;
 		}
 		else
@@ -134,7 +198,7 @@ inline char *GetFileDirectory(const char* filename) {
 	}
 	else
 	{
-		//1.Èç¹ûÊÇÏà¶ÔÂ·¾¶,»ñÈ¡µ±Ç°Ä¿Â¼  
+		//1.ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½,ï¿½ï¿½È¡ï¿½ï¿½Ç°Ä¿Â¼  
 		//io.h  
 		if (getcwd(dir, 1024) != NULL)
 		{
@@ -163,14 +227,16 @@ void Usage(){
 void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize = 5000);
 
 void loadIni() {
-	char ini_path[1024];
-	GetCurrentPath(ini_path, 1024);
-	char *ps = strrchr(ini_path, '.');
-	if (!ps) return;
-	strcpy(ps, ".ini");
+	char ini_path_[512];
+	char ini_path[512];
+	GetCurrentPath(ini_path_, 512);
+//	char *ps = strrchr(ini_path, '.');
+//	if (!ps) return;
+//	strcpy(ps, ".ini");
+    sprintf(ini_path, "%s%s", ini_path_,"ExtraFeaturePoint.ini");
 	char * temp = nullptr;
 
-	temp = GetIniKeyString("SIFTEXTRACT", "SIFT_KEPT_NUM", ini_path);
+	temp =GetIniKeyString("SIFTEXTRACT", "SIFT_KEPT_NUM", ini_path);
 	if (temp && strlen(temp) > 0) {
 		sscanf(temp, "%d", &g_sift_point_kept);
 	}
@@ -225,14 +291,14 @@ int main(int argc, char **argv)
 	LiDARReg::loadSIFTBinFile(argv[1], keypioints);
 	FILE* fp = fopen(argv[2], "w");
 	if (!fp) return 1;
-	fprintf(fp, "%d %d\n", keypioints.size(), 128); //ÐÐ,ÁÐ
+	fprintf(fp, "%d %d\n", keypioints.size(), 128); //ï¿½ï¿½,ï¿½ï¿½
 	for (size_t i = 0; i < keypioints.size(); i++) {
 		double x = keypioints[i].keys[0];
 		double y = keypioints[i].keys[1];
 		double s = keypioints[i].keys[2];
 		double o = keypioints[i].keys[3];
 		
-		fprintf(fp, "%.2f %.2f %.3f %.3f\n", y, x, s, o); //ÐÐ,ÁÐ
+		fprintf(fp, "%.2f %.2f %.3f %.3f\n", y, x, s, o); //ï¿½ï¿½,ï¿½ï¿½
 
 // 		for (int kd = 0; kd < 128; kd++)
 // 		{
@@ -277,15 +343,15 @@ int main(int argc, char **argv)
 	//{
 	//	Usage();
 	//}
-	////argv[1] = "G:\\==Äþ²¨ÇãÐ±²âÊÔÊý¾Ý==\\Test\\Êý¾Ý\\ÏÂÊÓ+ÏÂÊÓ\\126.jpg";
-	////argv[2] = "G:\\==Äþ²¨ÇãÐ±²âÊÔÊý¾Ý==\\Test\\Êý¾Ý\\ÏÂÊÓ+ÏÂÊÓ\\126.key";
+	////argv[1] = "G:\\==ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½==\\Test\\ï¿½ï¿½ï¿½ï¿½\\ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½ï¿½\\126.jpg";
+	////argv[2] = "G:\\==ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½==\\Test\\ï¿½ï¿½ï¿½ï¿½\\ï¿½ï¿½ï¿½ï¿½+ï¿½ï¿½ï¿½ï¿½\\126.key";
 	////argv[3] = "5000";
 	//ExtraFeatPt(argv[1], argv[2], atoi(argv[3]));
 	//return 0;
 
-	{
-		loadIni();
-	}
+
+	loadIni();
+
 
 	if (argc == 4)
 	{
@@ -293,14 +359,17 @@ int main(int argc, char **argv)
 	}
 	else if (argc == 2)
 	{
-		char szParaFPath[_MAX_PATH];
+		//char szParaFPath[_MAX_PATH];
+		char szParaFPath[260];
 		sprintf(szParaFPath, "%s", argv[1]);
 		FILE* fid = fopen(szParaFPath, "r");
 		if (!fid)
 			return 0;
 		char szbuf[1024];
-		char szImgPath[_MAX_PATH];
-		char szOutFeaPath[_MAX_PATH];
+		//char szImgPath[_MAX_PATH];
+		//char szOutFeaPath[_MAX_PATH];
+		char szImgPath[260];
+		char szOutFeaPath[260];
 		int nBlockSize = 5000;
 		fgets(szbuf, 1024, fid);
 		sscanf(szbuf, "%s%s%d", szImgPath, szOutFeaPath, &nBlockSize);
@@ -317,7 +386,7 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 		return;
 
 	GDALAllRegister();
-	CPLSetConfigOption("GDAL_FILENAME_IS_UTF8", "NO");  //Ö§³ÖÖÐÎÄÂ·¾¶
+	CPLSetConfigOption("GDAL_FILENAME_IS_UTF8", "NO");  //Ö§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½
 
 	GDALDataset *poDataSet = NULL;
 	poDataSet = (GDALDataset*)GDALOpen(lpImgPath, GA_ReadOnly);
@@ -333,7 +402,7 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 	GDALDataType dT = poDataSet->GetRasterBand(1)->GetRasterDataType();
 
 	int nw, nh;
-	nw = nh = 1;//½«Ó°Ïñ·Ö³Énw*nh¸ö¿é
+	nw = nh = 1;//ï¿½ï¿½Ó°ï¿½ï¿½Ö³ï¿½nw*nhï¿½ï¿½ï¿½ï¿½
 
 	int BlockSize = nBlockSize;
 
@@ -407,11 +476,11 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 
 	if (support != SiftGPU::SIFTGPU_FULL_SUPPORTED)
 	{
-		printf("GL »·¾³´íÎó");
+		printf("GL ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
 		return;
 	}
 
-	//ÌáÈ¡½á¹û
+	//ï¿½ï¿½È¡ï¿½ï¿½ï¿½
 	printf("Start Extracting Sift Features from up to down, left to right: \n");
 
 	for (int i = 0; i < nw; i++)
@@ -435,8 +504,8 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 				eh = nY - 1;
 			}
 
-			w = ew - sw + 1;//Êý¾Ý¿í¶È
-			h = eh - sh + 1;//Êý¾Ý¸ß¶È
+			w = ew - sw + 1;//ï¿½ï¿½ï¿½Ý¿ï¿½ï¿½ï¿½
+			h = eh - sh + 1;//ï¿½ï¿½ï¿½Ý¸ß¶ï¿½
 
 			unsigned char* pData = new unsigned char[w * h];//2015-03-12, ==>>'+128'
 
@@ -448,7 +517,7 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 
 #pragma omp parallel for
 				for (int k = 0; k < w*h; k++)
-				{//RGB×ª»Ò¶È		
+				{//RGB×ªï¿½Ò¶ï¿½		
 					pData[k] = int((pD[k] + pD[w * h + k] + pD[2 * w * h + k]) / 3 + 0.5);
 				}
 
@@ -494,7 +563,7 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 				key_temp[k].x += i * BlockSize;
 				key_temp[k].y += j * BlockSize;
 
-				fprintf(f, "%.2f %.2f %.3f %.3f\n", key_temp[k].y, key_temp[k].x, key_temp[k].s, key_temp[k].o); //ÐÐ£¬ÁÐ
+				fprintf(f, "%.2f %.2f %.3f %.3f\n", key_temp[k].y, key_temp[k].x, key_temp[k].s, key_temp[k].o); //ï¿½Ð£ï¿½ï¿½ï¿½
 
 				for (int kd = 0; kd < 128; kd++)
 				{
@@ -537,11 +606,12 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 #else
 void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize/* = 2500*/)
 {
-	if (_access(lpOutFeaPath, 0) == 0)
+	//if (_access(lpOutFeaPath, 0) == 0)
+	if(access(lpOutFeaPath, 0) == 0)
 		return;
 
 	GDALAllRegister();
-	CPLSetConfigOption("GDAL_FILENAME_IS_UTF8", "NO");  //Ö§³ÖÖÐÎÄÂ·¾¶
+	CPLSetConfigOption("GDAL_FILENAME_IS_UTF8", "NO");  //Ö§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½
 
 	GDALDataset *poDataSet = NULL;
 	poDataSet = (GDALDataset*)GDALOpen(lpImgPath, GA_ReadOnly);
@@ -557,7 +627,7 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 	GDALDataType dT = poDataSet->GetRasterBand(1)->GetRasterDataType();
 
 	int nw, nh;
-	nw = nh = 1;//½«Ó°Ïñ·Ö³Énw*nh¸ö¿é
+	nw = nh = 1;//ï¿½ï¿½Ó°ï¿½ï¿½Ö³ï¿½nw*nhï¿½ï¿½ï¿½ï¿½
 
 	int BlockSize = nBlockSize;
 
@@ -622,11 +692,11 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 
 	if (support != SiftGPU::SIFTGPU_FULL_SUPPORTED)
 	{
-		printf("GL »·¾³´íÎó");
+		printf("GL ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½");
 		return;
 	}
 
-	//ÌáÈ¡½á¹û
+	//ï¿½ï¿½È¡ï¿½ï¿½ï¿½
 	printf("Start Extracting Sift Features from up to down, left to right: \n");
 
 	std::vector<LiDARReg::SIFT_KEY_POINT> sift_key_points_all;
@@ -651,8 +721,8 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 				eh = nY - 1;
 			}
 
-			w = ew - sw + 1;//Êý¾Ý¿í¶È
-			h = eh - sh + 1;//Êý¾Ý¸ß¶È
+			w = ew - sw + 1;//ï¿½ï¿½ï¿½Ý¿ï¿½ï¿½ï¿½
+			h = eh - sh + 1;//ï¿½ï¿½ï¿½Ý¸ß¶ï¿½
 
 			unsigned char* pData = new unsigned char[w * h];//2015-03-12, ==>>'+128'
 
@@ -664,7 +734,7 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 
 #pragma omp parallel for
 				for (int k = 0; k < w*h; k++)
-				{//RGB×ª»Ò¶È		
+				{//RGB×ªï¿½Ò¶ï¿½		
 					pData[k] = int((pD[k] + pD[w * h + k] + pD[2 * w * h + k]) / 3 + 0.5);
 				}
 
@@ -763,7 +833,7 @@ void ExtraFeatPt(const char *lpImgPath, const char* lpOutFeaPath, int nBlockSize
 
 	clock_t time_end = clock();
 
-	printf("[ExtraFeaturePt] Time using: %.3lf\n", double(time_end - time_start) / CLK_TCK);
-
+	//printf("[ExtraFeaturePt] Time using: %.3lf\n", double(time_end - time_start) / CLK_TCK);
+    printf("[ExtraFeaturePt] Time using: %.3lf\n", double(time_end - time_start) / CLOCKS_PER_SEC);//CLK_TCKå’ŒCLOCKS_PER_SECç­‰æ•ˆï¼Œä½†æ˜¯å·²ç»è¿‡æ—¶
 }
 #endif // ANSI_SIFT_FILE

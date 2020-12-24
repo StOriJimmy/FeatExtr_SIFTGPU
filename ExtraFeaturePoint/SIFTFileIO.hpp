@@ -1,6 +1,7 @@
+
 #ifndef __SIFT_File_IO__
 #define __SIFT_File_IO__
-
+//#endif
 #ifndef LIDARREG_NAMESPACE_BEGIN
 #define LIDARREG_NAMESPACE_BEGIN namespace LiDARReg{
 #endif
@@ -10,8 +11,7 @@
 
 #include <vector>
 #include <iostream>
-#include <io.h>
-
+#include <sys/io.h>
 LIDARREG_NAMESPACE_BEGIN
 
 #define KEYFEATURE_NUM 4
@@ -73,8 +73,10 @@ inline bool saveSIFTBinFile(const char * path, const std::vector<SIFT_KEY_POINT>
 
 inline bool loadSIFTASCIIFile(const char * path, std::vector<SIFT_KEY_POINT> & sift_key_points)
 {
-	FILE *fp = nullptr;
-	fopen_s(&fp, path, "r");
+	//windows涓嬩娇鐢╢open_s
+	//FILE *fp = nullptr;  
+	//fopen_s(&fp, path, "r");
+	FILE *fp=fopen(path,"r");
 	if (!fp) {
 		std::cerr << "failed to open file: " << path << std::endl;
 		return false;
@@ -110,8 +112,9 @@ inline bool loadSIFTASCIIFile(const char * path, std::vector<SIFT_KEY_POINT> & s
 
 inline bool saveSIFTASCIIFile(const char * path, const std::vector<SIFT_KEY_POINT> & sift_key_points, bool save_descriptor)
 {
-	FILE *fp = nullptr;
-	fopen_s(&fp, path, "w");
+	//FILE *fp = nullptr;  
+	//fopen_s(&fp, path, "w");
+	FILE *fp=fopen(path,"w");
 	if (!fp) {
 		std::cerr << "failed to open file: " << path << std::endl;
 		return false;
@@ -119,14 +122,14 @@ inline bool saveSIFTASCIIFile(const char * path, const std::vector<SIFT_KEY_POIN
 	int pt_num = sift_key_points.size();
 	int des_num = DESCRIPTOR_NUM;
 
-	fprintf(fp, "%d %d\n", sift_key_points.size(), 128); //行,列
+	fprintf(fp, "%d %d\n", sift_key_points.size(), 128);
 	for (size_t i = 0; i < sift_key_points.size(); i++) {
 		double x = sift_key_points[i].keys[0];
 		double y = sift_key_points[i].keys[1];
 		double s = sift_key_points[i].keys[2];
 		double o = sift_key_points[i].keys[3];
 
-		fprintf(fp, "%.2f %.2f %.3f %.3f\n", y, x, s, o); //行,列
+		fprintf(fp, "%.2f %.2f %.3f %.3f\n", y, x, s, o);
 
 		if (save_descriptor) {
 			for (int kd = 0; kd < 128; kd++)
